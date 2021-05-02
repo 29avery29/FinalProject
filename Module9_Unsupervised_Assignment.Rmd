@@ -101,6 +101,56 @@ nci.data.s = scale(nci.data[,c(2:6831)])
 ***
 2)
 
+```{r}
+sse = rep(0,10)
+for (i in 1:10) {
+  fit = kmeans(nci.data.s,centers=i)
+  sse[i] = fit$totss-fit$betweenss
+}
+plot(sse,type='b')
+
+r2 = rep(0,10)
+for (i in 1:10) {
+  fit = kmeans(nci.data.s,centers=i)
+  r2[i] = fit$betweenss/fit$totss
+}
+plot(r2,type='b')
+```
+Here we are using the sum of squares error (SSE) and $R^2$ for the k-means clustering algorithm on a different number of clusters, 1 through 10. These plots show that as more clusters are added the SSE and $R^2$ measurements become more desirable and also do not appear to level off. Thus we will use 10 clusters on our k-means clustering model, which is also easy to interpret because our nci.labs has 10 unique outcomes (since we combined the 5 categories with each 1 point).
+
+```{r}
+set.seed(99)
+fitK <- kmeans(nci.data.s, centers=10, nstart = 3)
+table(nci.labs.num,fitK$cluster)
+```
+Now we fit our model on the scaled data, with 10 clusters and also nstart=3 to ensure we find the best set of clusters. In this table we can tell that the clusters returned by the algorithm do not match up with the numbers we assigned to our cancer cell lines, so we must rearrange the table.
+
+```{r, dpi=100, out.height='85%'}
+include_graphics("KMeansClusterTable.jpg")
+```
+This picture shows how we manually assigned clusters as we saw fit to each cancer cell line. Easy decisions included assigning cancer cell line 10 (or RENAL) to cluster 7 and cancer cell line 5 (or MELANOMA) to cluster 2. Eventually we narrowed this down to assign each cancer cell line to a cluster in order to optimize the number of correct assignments.
+
+```{r}
+#rearrange the table to get the clusters to correspond in number
+nci.labs.num2 = c(8,8,8,8,8,8,8,6,6,6,6,6,10,10,10,10,10,10,10,4,4,4,4,4,4,2,2,2,2,2,2,2,2,5,5,5,5,5,5,5,5,5,3,3,3,3,3,1,1,1,1,1,1,9,9,7,7,7,7,7,7,7,7,7)
+table(nci.labs.num2,fitK$cluster)
+```
+
+```{r}
+#accuracy
+sum(nci.labs.num2==fitK$cluster)/64
+```
+
+We found an accuracy of 62.5% with assigning the clusters in the way described above. Some interesting findings were that OVARIAN was often grouped in the same cluster as NSCLC and PROSTATE, leading to the decision to name clusters for OVARIAN and PROSTATE that contained less observation than were included in the cluster we deemed the NSCLC one (which was cluster 5). Also the Other category was divided into 3 different clusters, so if we were to perform this k-means clustering differently, another procedure worth testing would be to group the two K562 observations into one, the two MCF7 observations into one, and leave the UNKNOWN as its own cluster. Otherwise our k-means clustering algorithm appeared to work well. 
+No clustered plots were included because there were 6830 gene expressions and plotting them all against each other would be impossible to read, and also rather useless because visualizing just two of the many gene expressions would give little information towards the clusters we found.
+
+```{r}
+#Other information
+fitK$totss #total sum of squares
+fitK$betweenss #between cluster sum of squares
+fitK$tot.withinss #within cluster sum of squares
+```
+This additional information shows that the total sum of squares is contributed to more by within cluster sum of squares, indicating that our clusters are large in size and the differences within clusters is actually comparable to the differences between the clusters. The betweenss divided by the totalss was smaller than we saw in the lab with the iris data, which contributes to the explanation of why the accuracy here is lower than that for the iris data.
 
 ***
 3)
