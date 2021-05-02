@@ -104,6 +104,14 @@ table(nci.labs)
 nci.data.s = scale(nci.data)
 ```
 
+```{r}
+new.data = nci.data[-c(1:ncol(nci.data))]
+for (i in order(factor(nci.labs))) {
+  new.data = rbind(new.data, nci.data[i,])
+}
+View(new.data)
+```
+
 1) 
 
 
