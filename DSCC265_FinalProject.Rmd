@@ -1,0 +1,214 @@
+---
+title: "Final Project"
+author: "Avery Girsky and Ryan Hilton / Undergraduate Student"
+date: "5/6/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+```{r}
+library(ISLR) 
+library(MASS) 
+library(class) 
+library(kableExtra) 
+library(caret)
+library(tree) 
+library(randomForest)
+library(knitr)
+library(iml)
+library(naivebayes)
+library(Boruta)
+```
+
+``` {r}
+data = read.csv('NFL2009_18PlayData.csv')
+```
+
+```{r}
+data2018 = data[substr(data$game_date,1,4) == "2018",]
+```
+
+```{r}
+preplay = c("posteam_type","yardline_100","quarter_seconds_remaining","half_seconds_remaining","game_seconds_remaining","game_half","drive","qtr","down","goal_to_go","ydstogo","home_timeouts_remaining","away_timeouts_remaining","posteam_timeouts_remaining","defteam_timeouts_remaining","total_home_score","total_away_score","posteam_score","defteam_score","score_differential","ep","wp","def_wp","home_wp","away_wp") #removed time
+
+durplay = c("play_type","shotgun","no_huddle","qb_dropback","qb_kneel","qb_spike","qb_scramble","pass_length","pass_location","air_yards","yards_after_catch","run_location","run_gap","punt_blocked","qb_hit","rush_attempt","pass_attempt","extra_point_attempt","two_point_attempt","field_goal_attempt","kickoff_attempt","punt_attempt","lateral_reception","lateral_rush","lateral_recovery","interception","fumble","fumble_lost","tackled_for_loss","sack","complete_pass")
+
+postplay = c("sp","ydsnet","yards_gained","posteam_score_post","defteam_score_post","score_differential_post","epa","wpa","third_down_converted","third_down_failed","fourth_down_converted","fourth_down_failed","incomplete_pass","safety","touchdown","pass_touchdown","rush_touchdown","return_touchdown","return_yards")
+
+other = c("play_id","game_id","game_date","quarter_end","timeout","no_score_prob","opp_fg_prob","opp_safety_prob","opp_td_prob","fg_prob","safety_prob","td_prob","extra_point_prob","two_point_conversion_prob","solo_tackle","penalty","extra_point_attempt","two_point_attempt","field_goal_attempt","kickoff_attempt","punt_attempt","assist_tackle","penalty_yards","replay_or_challenge")
+data2018_description = data2018["desc"]
+```
+
+```{r}
+data2018.1 = data2018[c(preplay, durplay, postplay, other, "desc")]
+```
+
+```{r}
+dim(data2018.1)
+```
+
+```{r}
+predictors = c(preplay, durplay)
+data2018.2 = data2018.1[c(predictors, "touchdown")]
+```
+
+```{r}
+data2018_preprocessed <- data2018.2[!(is.na(data2018.2$play_type) | (data2018.2$play_type == "no_play")),]
+data2018_preprocessed$down[is.na(data2018_preprocessed$down)] = 0
+
+data2018_preprocessed$posteam_score[is.na(data2018_preprocessed$posteam_score)] = 0
+data2018_preprocessed$defteam_score[is.na(data2018_preprocessed$defteam_score)] = 0
+data2018_preprocessed$score_differential[is.na(data2018_preprocessed$score_differential)] = 0
+
+data2018_preprocessed$wp[is.na(data2018_preprocessed$wp)] = 0.5
+data2018_preprocessed$def_wp[is.na(data2018_preprocessed$def_wp)] = 0.5
+data2018_preprocessed$home_wp[is.na(data2018_preprocessed$home_wp)] = 0.5
+data2018_preprocessed$away_wp[is.na(data2018_preprocessed$away_wp)] = 0.5
+
+data2018_preprocessed$pass_length[is.na(data2018_preprocessed$pass_length)] = "None"
+data2018_preprocessed$pass_location[is.na(data2018_preprocessed$pass_location)] = "None"
+data2018_preprocessed$run_location[is.na(data2018_preprocessed$run_location)] = "None"
+data2018_preprocessed$run_gap[is.na(data2018_preprocessed$run_gap)] = "None"
+
+data2018_preprocessed$air_yards[is.na(data2018_preprocessed$air_yards)] = 0
+data2018_preprocessed$yards_after_catch[is.na(data2018_preprocessed$yards_after_catch)] = 0
+```
+
+```{r, warning=FALSE}
+data2018_preprocessed$half_seconds_remaining[is.na(data2018_preprocessed$half_seconds_remaining)] = 1000
+for (i in 1:nrow(data2018_preprocessed)) {
+  if (is.na(data2018_preprocessed$game_seconds_remaining[i])) {
+    if (data2018_preprocessed$game_half[i] == "Half2") {
+      data2018_preprocessed$game_seconds_remaining[i] = data2018_preprocessed$half_seconds_remaining[i]
+    }
+    else if (data2018_preprocessed$qtr == 2) {
+      data2018_preprocessed$game_seconds_remaining[i] = data2018_preprocessed$quarter_seconds_remaining[i] + 1800
+    }
+    else {
+      data2018_preprocessed$game_seconds_remaining[i] = data2018_preprocessed$quarter_seconds_remaining[i] + 2700
+    }
+  }
+}
+```
+
+```{r}
+data2018_preprocessed$game_half[data2018_preprocessed$game_half == "Half1"] = 1
+data2018_preprocessed$game_half[data2018_preprocessed$game_half == "Half2"] = 2
+```
+
+```{r, eval =FALSE}
+for(i in (1:57)){
+  print(names(data2018_preprocessed[i]))
+  print(sum(is.na(data2018_preprocessed[i])))
+}
+```
+
+
+
+```{r}
+dataset = data2018_preprocessed
+dataset$touchdown = factor(dataset$touchdown)
+dataset.predictors = subset(dataset, select = -touchdown)
+```
+
+```{r}
+set.seed(99)
+rows <- sample(nrow(dataset))
+train = rows[1:30000]
+full.train.data = dataset[train,]
+full.test.data = dataset[-train,]
+```
+
+```{r}
+f.bayes.model = naive_bayes(touchdown~., data = full.train.data, laplace = 1)
+f.bayes.model2 = naive_bayes(touchdown~., data = full.train.data, laplace = 1, usepoisson = TRUE)
+
+f.bayes.pred = predict(f.bayes.model,full.test.data,type="class")
+f.bayes.cm = confusionMatrix(as.factor(test.data$touchdown), as.factor(f.bayes.pred))
+f.bayes.cm
+
+f.bayes.pred2 = predict(f.bayes.model2,full.test.data,type="class")
+f.bayes.cm2 = confusionMatrix(as.factor(test.data$touchdown), as.factor(f.bayes.pred2))
+f.bayes.cm2
+```
+
+```{r}
+set.seed(99)
+rf = randomForest(touchdown~., data = dataset, importance = TRUE)
+plot(rf)
+rf.df = as.data.frame(importance(rf))
+```
+
+```{r}
+vars = rownames(rf.df[rf.df$MeanDecreaseAccuracy > 10,])
+dataset.1 = dataset[c(vars, "touchdown")]
+```
+
+```{r}
+set.seed(99)
+boruta.fit <- Boruta(touchdown ~ ., data = dataset.1, maxRuns = 50)
+print(boruta.fit)
+plot(boruta.fit, las = 2, cex.axis = 0.6, main="Var Imp")
+```
+
+```{r}
+
+```
+
+```{r}
+importance_stats = attStats(boruta.fit)
+```
+
+```{r}
+vars = rownames(importance_stats[head(order(importance_stats$medianImp, decreasing = TRUE), n = 6),])
+dataset.1 = dataset.1[c(vars, "touchdown")]
+```
+
+```{r}
+set.seed(99)
+rows <- sample(nrow(dataset.1))
+train = rows[1:30000]
+train.data = dataset.1[train,]
+test.data = dataset.1[-train,]
+```
+
+```{r}
+bayes.model = naive_bayes(touchdown~., data = train.data, laplace = 1)
+bayes.model2 = naive_bayes(touchdown~., data = train.data, laplace = 1, usepoisson = TRUE)
+```
+
+```{r}
+bayes.pred = predict(bayes.model,test.data,type="class")
+bayes.cm = confusionMatrix(as.factor(test.data$touchdown), as.factor(bayes.pred))
+bayes.cm
+
+bayes.pred2 = predict(bayes.model2,test.data,type="class")
+bayes.cm2 = confusionMatrix(as.factor(test.data$touchdown), as.factor(bayes.pred2))
+bayes.cm2
+```
+
+```{r, warning = FALSE}
+set.seed(99)
+tree.touchdown = tree(touchdown~., data = train.data)
+
+cv.touchdown=cv.tree(tree.touchdown, FUN = prune.misclass)
+plot(cv.touchdown$size,cv.touchdown$dev,type='b', main = "Full Model")
+
+prune.touchdown = prune.misclass(tree.touchdown, best = 14)
+plot(prune.touchdown)
+text(prune.touchdown, pretty = 0, cex = 0.5) 
+title("Full Model Tree (14 Node)")
+```
+```{r}
+prune.touchdown
+tree.pred = predict(prune.touchdown,test.data,type="class") #should be pruned tree from cv
+tree.cm = confusionMatrix(as.factor(test.data$touchdown), as.factor(tree.pred))
+tree.cm
+```
